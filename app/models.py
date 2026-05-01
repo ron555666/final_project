@@ -2,6 +2,13 @@ from sqlalchemy import Column, String, Float, Index, ForeignKey, Table, Boolean,
 from sqlalchemy.orm import relationship
 from app.database import Base
 
+store_services = Table(
+    "store_services",
+    Base.metadata,
+    Column("store_id", String, ForeignKey("stores.store_id"), primary_key=True),
+    Column("service_id", String, ForeignKey("services.service_id"), primary_key=True)
+)
+
 class Store(Base):
     __tablename__ = "stores"
     
@@ -22,6 +29,11 @@ class Store(Base):
     
     phone = Column(String, nullable=True)
     services = Column(String, nullable=True)
+    service_items = relationship(
+    "Service",
+    secondary=store_services,
+    back_populates="stores"
+)
     
     hours_mon = Column(String, nullable=True)
     hours_tue = Column(String, nullable=True)
@@ -32,6 +44,18 @@ class Store(Base):
     hours_sun = Column(String, nullable=True)
     
 Index("idx_store_lat_lon", Store.latitude, Store.longitude)
+
+class Service(Base):
+    __tablename__ = "services"
+
+    service_id = Column(String, primary_key=True)
+    name = Column(String, unique=True, nullable=False, index=True)
+
+    stores = relationship(
+    "Store",
+    secondary=store_services,
+    back_populates="service_items"
+    )
 
 
 role_permissions = Table(

@@ -7,6 +7,7 @@ from datetime import datetime
 from io import StringIO
 import math
 import csv
+import uuid
 
 from app.database import get_db
 from app import models, schemas
@@ -16,10 +17,14 @@ from app.rate_limit import limiter
 
 
 router = APIRouter(
-    prefix="/api/stores",
-    tags=["Stores"]
+    prefix="/api/admin/stores",
+    tags=["Admin Stores"]
 )
 
+public_router = APIRouter(
+    prefix="/api/stores",
+    tags=["Public Store Search"]
+)
 
 def is_store_open_now(store):
     """
@@ -49,7 +54,34 @@ def is_store_open_now(store):
         return open_time <= current_time <= close_time
     except Exception:
         return False
+    
+def get_or_create_services(service_names, db):
+    service_items = []
 
+    if not service_names:
+        return service_items
+
+    for service_name in service_names:
+        clean_name = service_name.strip()
+
+        if not clean_name:
+            continue
+
+        service = db.query(models.Service).filter(
+            models.Service.name == clean_name
+        ).first()
+
+        if not service:
+            service = models.Service(
+                service_id=str(uuid.uuid4()),
+                name=clean_name
+            )
+            db.add(service)
+            db.flush()
+
+        service_items.append(service)
+
+    return service_items
 
 @router.post("/", response_model=schemas.StoreResponse)
 def create_store(
@@ -69,7 +101,31 @@ def create_store(
     if existing_store:
         raise HTTPException(status_code=400, detail="Store already exists")
 
-    new_store = models.Store(**store.model_dump())
+    store_data = store.model_dump()
+    service_names = store_data.pop("services", None)
+
+    if store_data.get("latitude") is None or store_data.get("longitude") is None:
+        full_address = (
+            f"{store.address_street}, {store.address_city}, "
+            f"{store.address_state} {store.address_postal_code}, "
+            f"{store.address_country}"
+        )
+
+        location = geocode_location(full_address)
+
+        if not location:
+            raise HTTPException(
+                status_code=400,
+                detail="Address could not be geocoded"
+            )
+
+        store_data["latitude"] = location["latitude"]
+        store_data["longitude"] = location["longitude"]
+
+    new_store = models.Store(**store_data)
+    
+    new_store.service_items = get_or_create_services(service_names, db)
+    new_store.services = "|".join(service_names) if service_names else None
 
     db.add(new_store)
     db.commit()
@@ -79,8 +135,12 @@ def create_store(
 
 
 @router.get("/", response_model=list[schemas.StoreResponse])
-def get_stores(db: Session = Depends(get_db)):
-    return db.query(models.Store).all()
+def get_stores(
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    return db.query(models.Store).offset(skip).limit(limit).all()
 
 
 @router.get("/{store_id}", response_model=schemas.StoreResponse)
@@ -148,7 +208,7 @@ def delete_store(
     }
 
 
-@router.post("/search", response_model=list[schemas.StoreSearchResult])
+@public_router.post("/search", response_model=schemas.StoreSearchResponse)
 @limiter.limit("10/minute")
 @limiter.limit("100/hour")
 def search_stores(
@@ -222,10 +282,16 @@ def search_stores(
     if search.store_types:
         query = query.filter(models.Store.store_type.in_(search.store_types))
 
+    # if search.services:
+    #     for service in search.services:
+    #         query = query.filter(models.Store.services.ilike(f"%{service}%"))
+    
     if search.services:
         for service in search.services:
-            query = query.filter(models.Store.services.ilike(f"%{service}%"))
-
+            query = query.filter(
+                models.Store.service_items.any(models.Service.name == service)
+            )
+            
     candidate_stores = query.all()
     results = []
 
@@ -267,8 +333,20 @@ def search_stores(
 
     results.sort(key=lambda x: x["distance_miles"])
 
-    return results
-
+    return {
+        "metadata": {
+            "latitude": lat,
+            "longitude": lon,
+            "radius_miles": radius,
+            "filters": {
+                "store_types": search.store_types,
+                "services": search.services,
+                "open_now": search.open_now,
+                "min_rating": search.min_rating
+            }
+        },
+        "results": results
+    }
 
 @router.post("/import", response_model=schemas.ImportReport)
 def import_stores(
@@ -276,33 +354,95 @@ def import_stores(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(permission_required("import_store"))
 ):
-    """
-    Import stores from CSV file.
+    required_headers = [
+        "store_id", "name", "store_type", "status", "latitude", "longitude",
+        "address_street", "address_city", "address_state", "address_postal_code",
+        "address_country", "phone", "services", "hours_mon", "hours_tue",
+        "hours_wed", "hours_thu", "hours_fri", "hours_sat", "hours_sun"
+    ]
 
-    If store exists → update
-    If not → create new
-
-    Return counts:
-    - created
-    - updated
-    - failed
-    """
     content = file.file.read().decode("utf-8")
     csv_reader = csv.DictReader(StringIO(content))
 
+    if csv_reader.fieldnames != required_headers:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV headers do not match required format"
+        )
+
     created = 0
     updated = 0
-    failed = 0
+    errors = []
+    rows_to_process = []
 
-    for row in csv_reader:
+    for row_number, row in enumerate(csv_reader, start=2):
         try:
+            if not row["store_id"]:
+                raise ValueError("store_id is required")
+
+            if row["store_type"] not in ["flagship", "regular", "outlet", "express"]:
+                raise ValueError("Invalid store_type")
+
+            if row["status"] not in ["active", "inactive", "temporarily_closed"]:
+                raise ValueError("Invalid status")
+
+            if row["latitude"]:
+                row["latitude"] = float(row["latitude"])
+
+                if row["latitude"] < -90 or row["latitude"] > 90:
+                    raise ValueError("latitude must be between -90 and 90")
+            else:
+                row["latitude"] = None
+
+            if row["longitude"]:
+                row["longitude"] = float(row["longitude"])
+
+                if row["longitude"] < -180 or row["longitude"] > 180:
+                    raise ValueError("longitude must be between -180 and 180")
+            else:
+                row["longitude"] = None
+
+            if row["latitude"] is None or row["longitude"] is None:
+                full_address = (
+                    f"{row['address_street']}, {row['address_city']}, "
+                    f"{row['address_state']} {row['address_postal_code']}, "
+                    f"{row['address_country']}"
+                )
+
+                location = geocode_location(full_address)
+
+                if not location:
+                    raise ValueError("Address could not be geocoded")
+
+                row["latitude"] = location["latitude"]
+                row["longitude"] = location["longitude"]
+
+            rows_to_process.append((row_number, row))
+
+        except Exception as e:
+            errors.append({
+                "row_number": row_number,
+                "error": str(e)
+            })
+
+    if errors:
+        return {
+            "total_rows": len(rows_to_process) + len(errors),
+            "created": 0,
+            "updated": 0,
+            "failed": len(errors),
+            "errors": errors
+        }
+
+    try:
+        for row_number, row in rows_to_process:
             existing = db.query(models.Store).filter(
                 models.Store.store_id == row["store_id"]
             ).first()
 
             if existing:
                 for key, value in row.items():
-                    if hasattr(existing, key) and value:
+                    if hasattr(existing, key):
                         setattr(existing, key, value)
 
                 updated += 1
@@ -312,15 +452,21 @@ def import_stores(
                 db.add(new_store)
                 created += 1
 
-        except Exception:
-            failed += 1
+        db.commit()
 
-    db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"CSV import failed and rolled back: {str(e)}"
+        )
 
     return {
+        "total_rows": len(rows_to_process),
         "created": created,
         "updated": updated,
-        "failed": failed
+        "failed": 0,
+        "errors": []
     }
 
 
