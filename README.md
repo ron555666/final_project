@@ -262,6 +262,11 @@ Viewer:
 email: viewer@test.com
 password: ViewerTest123!
 
+Marketer:
+
+email: marketer@test.com
+password: MarketerTest123!
+
 
 Database Migration
 
