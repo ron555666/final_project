@@ -290,12 +290,8 @@ Tasks were broken down into feature-based units, each corresponding to specific 
 Each task represents a functional unit that can be independently implemented and tested.
 
 Kanban board:
-https://github.com/yourname/projects/1
+https://github.com/users/ron555666/projects/3
 
 ### Kanban Board Snapshot
 
 ![Kanban Board](kanban.png)
-
-### Approach
-
-Since this is a solo project, the Kanban board was mainly used as a retrospective tool to organize completed features and simulate a real-world development workflow.
