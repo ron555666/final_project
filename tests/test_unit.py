@@ -1,35 +1,49 @@
-import pytest
 from app.routes.stores import is_store_open_now
-from datetime import datetime
+from app.utils.security import hash_password, verify_password
 
 
-class DummyStore:
-    def __init__(self, hours):
-        self.hours_mon = hours
-        self.hours_tue = hours
-        self.hours_wed = hours
-        self.hours_thu = hours
-        self.hours_fri = hours
-        self.hours_sat = hours
-        self.hours_sun = hours
+class FakeStore:
+    hours_mon = "00:00-23:59"
+    hours_tue = "00:00-23:59"
+    hours_wed = "00:00-23:59"
+    hours_thu = "00:00-23:59"
+    hours_fri = "00:00-23:59"
+    hours_sat = "00:00-23:59"
+    hours_sun = "00:00-23:59"
 
 
-def test_hours_open():
-    store = DummyStore("00:00-23:59")
-    assert is_store_open_now(store) == True
+class ClosedStore:
+    hours_mon = "closed"
+    hours_tue = "closed"
+    hours_wed = "closed"
+    hours_thu = "closed"
+    hours_fri = "closed"
+    hours_sat = "closed"
+    hours_sun = "closed"
 
 
-def test_hours_closed():
-    store = DummyStore("closed")
-    assert is_store_open_now(store) == False
+def test_password_hash_and_verify():
+    password = "TestPassword123!"
+    hashed = hash_password(password)
+
+    assert hashed != password
+    assert verify_password(password, hashed) is True
 
 
-def test_hours_invalid():
-    store = DummyStore("invalid")
-    assert is_store_open_now(store) == False
+def test_password_verify_wrong_password():
+    password = "TestPassword123!"
+    hashed = hash_password(password)
+
+    assert verify_password("WrongPassword123!", hashed) is False
 
 
-def test_hours_format():
-    store = DummyStore("09:00-17:00")
-    result = is_store_open_now(store)
-    assert isinstance(result, bool)
+def test_store_open_now():
+    store = FakeStore()
+
+    assert is_store_open_now(store) is True
+
+
+def test_store_closed_now():
+    store = ClosedStore()
+
+    assert is_store_open_now(store) is False

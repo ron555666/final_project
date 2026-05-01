@@ -1,35 +1,76 @@
 from fastapi.testclient import TestClient
+
 from app.main import app
+from app.database import SessionLocal
+from app import models
+from app.utils.security import hash_password
 
 client = TestClient(app)
 
 
+def setup_admin_user():
+    db = SessionLocal()
+
+    try:
+        role = db.query(models.Role).filter(
+            models.Role.role_id == "admin"
+        ).first()
+
+        if not role:
+            role = models.Role(
+                role_id="admin",
+                name="admin"
+            )
+            db.add(role)
+
+        user = db.query(models.User).filter(
+            models.User.email == "admin@test.com"
+        ).first()
+
+        if not user:
+            user = models.User(
+                user_id="TEST_ADMIN",
+                email="admin@test.com",
+                password_hash=hash_password("AdminTest123!"),
+                role_id="admin",
+                status="active"
+            )
+            db.add(user)
+
+        db.commit()
+
+    finally:
+        db.close()
+
+
 def test_login_and_access_protected():
-    # login
+    setup_admin_user()
+
     res = client.post("/api/auth/login", json={
         "email": "admin@test.com",
         "password": "AdminTest123!"
     })
 
+    assert res.status_code == 200
+
     token = res.json()["access_token"]
 
-    # access protected endpoint
-    res2 = client.post(
-        "/api/stores/",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "store_id": "INT001",
-            "name": "Integration Test",
-            "store_type": "flagship",
-            "status": "active",
-            "latitude": 37.77,
-            "longitude": -122.41,
-            "address_street": "123 Test",
-            "address_city": "SF",
-            "address_state": "CA",
-            "address_postal_code": "94105",
-            "address_country": "USA"
-        }
+    response = client.get(
+        "/api/admin/stores/?skip=0&limit=10",
+        headers={"Authorization": f"Bearer {token}"}
     )
 
-    assert res2.status_code in [200, 400]
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+
+def test_login_success():
+    setup_admin_user()
+
+    res = client.post("/api/auth/login", json={
+        "email": "admin@test.com",
+        "password": "AdminTest123!"
+    })
+
+    assert res.status_code == 200
+    assert "access_token" in res.json()

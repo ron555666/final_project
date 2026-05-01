@@ -1,6 +1,5 @@
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
-
 
 class StoreCreate(BaseModel):
     store_id: str
@@ -32,8 +31,7 @@ class StoreCreate(BaseModel):
 class StoreResponse(StoreCreate):
     services: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class StoreUpdate(BaseModel):
     name: Optional[str] = None
@@ -123,8 +121,7 @@ class ReviewResponse(ReviewCreate):
     store_id: str
     flagged: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RatingSummary(BaseModel):
@@ -148,8 +145,7 @@ class UserResponse(BaseModel):
     role_id: str
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserUpdate(BaseModel):

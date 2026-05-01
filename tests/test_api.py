@@ -1,5 +1,6 @@
-from fastapi.testclient import TestClient
 from unittest.mock import patch
+from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
@@ -17,7 +18,12 @@ def test_search_with_mock(mock_geo):
     })
 
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
-    
-    
+
+    data = response.json()
+
+    assert "metadata" in data
+    assert "results" in data
+    assert isinstance(data["results"], list)
+    assert data["metadata"]["latitude"] == 37.77
+    assert data["metadata"]["longitude"] == -122.41
     
