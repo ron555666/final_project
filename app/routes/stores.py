@@ -138,7 +138,8 @@ def create_store(
 def get_stores(
     skip: int = 0,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(permission_required("view_store"))
 ):
     return db.query(models.Store).offset(skip).limit(limit).all()
 
@@ -146,7 +147,8 @@ def get_stores(
 @router.get("/{store_id}", response_model=schemas.StoreResponse)
 def get_store(
     store_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(permission_required("view_store"))
 ):
     store = db.query(models.Store).filter(
         models.Store.store_id == store_id
@@ -174,13 +176,14 @@ def update_store(
 
     update_data = store_update.model_dump(exclude_unset=True)
 
+    service_names = update_data.pop("services", None)
+
     for key, value in update_data.items():
         setattr(store, key, value)
 
-    db.commit()
-    db.refresh(store)
-
-    return store
+    if service_names is not None:
+        store.service_items = get_or_create_services(service_names, db)
+        store.services = "|".join(service_names) if service_names else None
 
 
 @router.delete("/{store_id}")
