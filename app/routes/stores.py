@@ -166,7 +166,8 @@ def search_stores(
         lon = location["longitude"]
 
     elif search.postal_code:
-        location = geocode_location(search.postal_code)
+        zip_query = f"{search.postal_code}, USA"
+        location = geocode_location(zip_query)
 
         if not location:
             raise HTTPException(status_code=400, detail="Postal code could not be geocoded")
