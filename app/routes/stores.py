@@ -185,6 +185,11 @@ def update_store(
         store.service_items = get_or_create_services(service_names, db)
         store.services = "|".join(service_names) if service_names else None
 
+    db.commit()
+    db.refresh(store)
+
+    return store
+
 
 @router.delete("/{store_id}")
 def delete_store(

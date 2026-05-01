@@ -1,16 +1,17 @@
 from fastapi.testclient import TestClient
 import uuid
+from unittest.mock import patch
 
 from app.main import app
 from app.database import SessionLocal
 from app import models
 from app.utils.security import hash_password
-from unittest.mock import patch
 
 client = TestClient(app)
 
 
 PERMISSIONS = [
+    "view_store",
     "create_store",
     "update_store",
     "delete_store",
@@ -120,6 +121,10 @@ def login(email, password):
     return response.json()
 
 
+def auth_headers(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_login_refresh_logout_flow():
     setup_roles_and_users()
 
@@ -153,7 +158,7 @@ def test_authentication_and_protected_endpoint_access():
 
     response = client.get(
         "/api/admin/stores/?skip=0&limit=10",
-        headers={"Authorization": f"Bearer {token}"}
+        headers=auth_headers(token)
     )
 
     assert response.status_code == 200
@@ -170,7 +175,7 @@ def test_admin_store_crud_operations():
 
     create_response = client.post(
         "/api/admin/stores/",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=auth_headers(token),
         json={
             "store_id": store_id,
             "name": "CRUD Test Store",
@@ -190,23 +195,28 @@ def test_admin_store_crud_operations():
 
     assert create_response.status_code == 200
 
-    get_response = client.get(f"/api/admin/stores/{store_id}")
+    get_response = client.get(
+        f"/api/admin/stores/{store_id}",
+        headers=auth_headers(token)
+    )
     assert get_response.status_code == 200
 
     update_response = client.patch(
         f"/api/admin/stores/{store_id}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=auth_headers(token),
         json={
-            "name": "Updated CRUD Test Store"
+            "name": "Updated CRUD Test Store",
+            "services": ["pharmacy", "pickup"]
         }
     )
 
     assert update_response.status_code == 200
     assert update_response.json()["name"] == "Updated CRUD Test Store"
+    assert update_response.json()["services"] == "pharmacy|pickup"
 
     delete_response = client.delete(
         f"/api/admin/stores/{store_id}",
-        headers={"Authorization": f"Bearer {token}"}
+        headers=auth_headers(token)
     )
 
     assert delete_response.status_code == 200
@@ -221,7 +231,7 @@ def test_viewer_cannot_create_store():
 
     response = client.post(
         "/api/admin/stores/",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=auth_headers(token),
         json={
             "store_id": f"VIEWER_TEST_{uuid.uuid4()}",
             "name": "Viewer Test Store",
@@ -250,7 +260,7 @@ def test_csv_import_validation_bad_headers():
 
     response = client.post(
         "/api/admin/stores/import",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=auth_headers(token),
         files={
             "file": ("bad.csv", csv_content, "text/csv")
         }
@@ -258,8 +268,8 @@ def test_csv_import_validation_bad_headers():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "CSV headers do not match required format"
-    
-    
+
+
 @patch("app.routes.stores.geocode_location")
 def test_csv_import_with_geocoding(mock_geo):
     setup_roles_and_users()
@@ -285,7 +295,7 @@ def test_csv_import_with_geocoding(mock_geo):
 
     response = client.post(
         "/api/admin/stores/import",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=auth_headers(token),
         files={
             "file": ("stores.csv", csv_content, "text/csv")
         }
@@ -297,7 +307,11 @@ def test_csv_import_with_geocoding(mock_geo):
     assert data["failed"] == 0
     assert data["created"] + data["updated"] == 1
 
-    store_response = client.get("/api/admin/stores/CSV_GEO_TEST")
+    store_response = client.get(
+        "/api/admin/stores/CSV_GEO_TEST",
+        headers=auth_headers(token)
+    )
+
     assert store_response.status_code == 200
     assert store_response.json()["latitude"] == 37.7851806
 
@@ -313,7 +327,7 @@ def test_create_10_sample_stores_for_test_data():
 
         response = client.post(
             "/api/admin/stores/",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=auth_headers(token),
             json={
                 "store_id": store_id,
                 "name": f"Sample Store {i}",
@@ -333,9 +347,10 @@ def test_create_10_sample_stores_for_test_data():
 
         assert response.status_code in [200, 400]
 
-    list_response = client.get("/api/admin/stores/?skip=0&limit=20")
+    list_response = client.get(
+        "/api/admin/stores/?skip=0&limit=20",
+        headers=auth_headers(token)
+    )
+
     assert list_response.status_code == 200
     assert isinstance(list_response.json(), list)
-    
-    
-    
