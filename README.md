@@ -114,16 +114,17 @@ Reasons:
 
 ## Setup Instructions
 
-### 1. Install dependencies
-
 ```bash
-pip install -r requirements.txt
-2. Configure environment variables
 
+1. Install dependencies
+pip install -r requirements.txt
+
+2. Configure environment variables
 Create a .env file based on .env.example:
 
 DATABASE_URL=your_database_url
 SECRET_KEY=your_secret_key
+
 3. Initialize database
 python seed_rbac.py
 python seed_users.py
@@ -262,7 +263,7 @@ email: viewer@test.com
 password: ViewerTest123!
 
 
-Database Migration:
+Database Migration
 
 Database tables are created using SQLAlchemy:
 
