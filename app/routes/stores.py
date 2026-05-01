@@ -22,6 +22,10 @@ router = APIRouter(
 
 
 def is_store_open_now(store):
+    """
+    Check if the store is open at current time.
+    Return True if open, otherwise False.
+    """
     now = datetime.now()
     weekday = now.strftime("%a").lower()
 
@@ -53,6 +57,11 @@ def create_store(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(permission_required("create_store"))
 ):
+    """
+    Create a new store.
+    Check if store_id already exists.
+    Requires permission: create_store.
+    """
     existing_store = db.query(models.Store).filter(
         models.Store.store_id == store.store_id
     ).first()
@@ -147,6 +156,21 @@ def search_stores(
     search: schemas.StoreSearchRequest,
     db: Session = Depends(get_db)
 ):
+    """
+    Search stores by location and filters.
+
+    Support:
+    - latitude/longitude
+    - address
+    - postal code
+
+    Filters:
+    - radius
+    - store types
+    - services
+    - open now
+    - minimum rating
+    """
     radius = search.radius_miles
 
     if radius > 100:
@@ -252,6 +276,17 @@ def import_stores(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(permission_required("import_store"))
 ):
+    """
+    Import stores from CSV file.
+
+    If store exists → update
+    If not → create new
+
+    Return counts:
+    - created
+    - updated
+    - failed
+    """
     content = file.file.read().decode("utf-8")
     csv_reader = csv.DictReader(StringIO(content))
 
@@ -293,6 +328,9 @@ def import_stores(
 def export_stores_csv(
     db: Session = Depends(get_db)
 ):
+    """
+    Export all stores as CSV file.
+    """
     stores = db.query(models.Store).all()
 
     output = StringIO()
