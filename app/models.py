@@ -120,3 +120,17 @@ class Review(Base):
     rating = Column(Integer, nullable=False)
     comment = Column(String, nullable=True)
     flagged = Column(Boolean, default=False)
+    
+    
+Index("idx_stores_lat_lon", Store.latitude, Store.longitude)
+Index("idx_stores_type", Store.store_type)
+Index("idx_stores_postal_code", Store.address_postal_code)
+
+Index(
+    "idx_stores_active",
+    Store.status,
+    postgresql_where=(Store.status == "active")
+)
+
+Index("idx_users_email", User.email)
+Index("idx_refresh_token_hash", RefreshToken.token_hash)
