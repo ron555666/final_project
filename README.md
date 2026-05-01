@@ -269,3 +269,33 @@ Database tables are created using SQLAlchemy:
 
 Base.metadata.create_all(bind=engine)
 ```
+
+## Project Management
+
+This project was organized using a Kanban-style workflow in GitHub Projects.
+
+Tasks were broken down into feature-based units, each corresponding to specific API endpoints and backend logic:
+
+- Authentication (login, refresh, logout endpoints)
+- RBAC and permission middleware
+- Store CRUD APIs (create, update, delete, list)
+- Store search API (coordinates, address, ZIP)
+- Search filtering (radius, services, store types, open_now, rating)
+- Geocoding integration with caching
+- Review system APIs (create review, list reviews, rating summary, flag review)
+- CSV import/export APIs with validation
+- Unit, API, and integration testing
+- CI/CD and deployment
+
+Each task represents a functional unit that can be independently implemented and tested.
+
+Kanban board:
+https://github.com/yourname/projects/1
+
+### Kanban Board Snapshot
+
+![Kanban Board](kanban.png)
+
+### Approach
+
+Since this is a solo project, the Kanban board was mainly used as a retrospective tool to organize completed features and simulate a real-world development workflow.
